@@ -1,0 +1,5 @@
+[allowlist]
+description = "Ignore example API keys in config template"
+paths = [
+  '''public/config\.js\.example'''
+]

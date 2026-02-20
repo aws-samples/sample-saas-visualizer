@@ -1,0 +1,64 @@
+[project]
+name = "visualizer-display"
+version = "0.1.0"
+description = "AWS IoT LED Matrix Display with Hardware Abstraction"
+requires-python = ">=3.13"
+dependencies = [
+    "AWSIoTPythonSDK>=1.5.0",
+    "Pillow>=10.0.0",
+    "RGBMatrixEmulator==0.14.2",
+    # Note: rgbmatrix (rpi-rgb-led-matrix) must be built locally on Raspberry Pi.
+    # See docs/hardware-setup.md for installation instructions.
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.12.0",
+    "hypothesis>=6.0.0",
+]
+
+[project.scripts]
+visualizer-display = "visualizer_display.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatchling.build.targets.wheel]
+packages = ["visualizer_display"]
+
+[tool.hatchling.build.targets.wheel.force-include]
+"visualizer_display/fonts" = "visualizer_display/fonts"
+"visualizer_display/assets" = "visualizer_display/assets"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--tb=short",
+    "--cov=visualizer_display",
+    "--cov-report=term-missing",
+]
+
+[tool.coverage.run]
+source = ["visualizer_display"]
+omit = ["tests/*", "**/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

@@ -1,0 +1,31 @@
+// Runtime configuration for SaaS Visualiser
+// This file is loaded at runtime before the React app initializes
+// Update the values below to match your deployment environment
+
+window.APP_CONFIG = {
+  // API endpoints - replace with actual API Gateway URLs from your CloudFormation stack
+  api: {
+    // GET /orders - fetch orders for a tenant
+    dataAccessUrl: "https://abc.execute-api.region.amazonaws.com/prod/orders",
+
+    // PUT /orders - place order in shared queue
+    orderSharedQueueUrl: "https://abc.execute-api.region.amazonaws.com/prod/orders",
+
+    // PUT /orders_siloed - place order in siloed queue
+    orderSiloedQueueUrl: "https://abc.execute-api.region.amazonaws.com/prod/orders_siloed",
+
+    // PUT /new_tenant - Mystery Box functionality
+    newUserStageUrl: "https://abc.execute-api.region.amazonaws.com/prod/new_tenant"
+  },
+
+  // AWS Cognito authentication configuration
+  // Replace with actual values from your CloudFormation Cognito resources
+  auth: {
+    userPoolId: "region_abc123def",
+    userPoolClientId: "abc123def456ghi789",
+    region: "us-east-1",
+    // Email configuration for tenant users (must match samconfig.toml)
+    emailPrefix: "username+",
+    emailSuffix: "@example.com"
+  }
+};

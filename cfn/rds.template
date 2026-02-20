@@ -1,0 +1,535 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Provides RDS configuration.
+
+Parameters:
+  AvailabilityZones:
+    Type: List<AWS::EC2::AvailabilityZone::Name>
+
+  VpcID:
+    Type: AWS::EC2::VPC::Id
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+
+  DBReaderInstanceClass:
+    Type: String
+
+  DBWriterInstanceClass:
+    Type: String
+
+  PerformanceInsightsRetentionPeriod:
+    Type: Number
+
+  UsernamePrefix:
+    Type: String
+
+Transform: AWS::Serverless-2016-10-31
+
+Conditions:
+  EnablePerformanceInsights: !Not [!Equals [!Ref PerformanceInsightsRetentionPeriod, 0]]
+
+Mappings:
+  Constants:
+    Global:
+      InitTableName: orders
+      MysqlPort: 3306
+      RdsAdminUsername: admin
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures:
+      - arm64
+    MemorySize: 256
+
+Resources:
+  DBCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      AvailabilityZones:
+        - !Select [0, !Ref AvailabilityZones]
+        - !Select [1, !Ref AvailabilityZones]
+      DatabaseName: main
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      StorageEncrypted: true
+      EnableIAMDatabaseAuthentication: true
+      Engine: aurora-mysql
+      MasterUsername: !Join
+        - ""
+        - - '{{resolve:secretsmanager:'
+          - !Ref DBSecret
+          - :SecretString:username::}}
+      MasterUserPassword: !Join
+        - ""
+        - - '{{resolve:secretsmanager:'
+          - !Ref DBSecret
+          - :SecretString:password::}}
+      VpcSecurityGroupIds:
+        - !Ref RDSSecurityGroup
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: CloudFormation Sample Aurora Subnet Group
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  DBWriterInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: !Ref DBWriterInstanceClass
+      DBClusterIdentifier: !Ref DBCluster
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+
+  DBReaderInstance1:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: !Ref DBReaderInstanceClass
+      EnablePerformanceInsights: !If [EnablePerformanceInsights, True, False]
+      PerformanceInsightsRetentionPeriod: !If [EnablePerformanceInsights, !Ref PerformanceInsightsRetentionPeriod, !Ref "AWS::NoValue"]
+      DBClusterIdentifier: !Ref DBCluster
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+
+  DBReaderInstance2:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceClass: !Ref DBReaderInstanceClass
+      EnablePerformanceInsights: !If [EnablePerformanceInsights, True, False]
+      PerformanceInsightsRetentionPeriod: !If [EnablePerformanceInsights, !Ref PerformanceInsightsRetentionPeriod, !Ref "AWS::NoValue"]
+      DBClusterIdentifier: !Ref DBCluster
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      KmsKeyId: alias/aws/secretsmanager
+      GenerateSecretString:
+        ExcludePunctuation: true
+        GenerateStringKey: password
+        SecretStringTemplate: !Sub
+          - '{"username": "${AdminUsername}"}'
+          - AdminUsername: !FindInMap [Constants, Global, RdsAdminUsername]
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS Security Group
+      SecurityGroupEgress:
+        - CidrIp: 127.0.0.1/32
+          Description: Limits security group egress traffic to localhost
+          IpProtocol: "-1"
+      VpcId: !Ref VpcID
+
+  DBProxy:
+    Type: AWS::RDS::DBProxy
+    Properties:
+      Auth:
+        - AuthScheme: SECRETS
+          IAMAuth: REQUIRED
+          SecretArn: !Ref DBSecret
+      DBProxyName: !Sub proxy-${AWS::StackName}
+      DefaultAuthScheme: IAM_AUTH
+      EngineFamily: MYSQL
+      RoleArn: !GetAtt DBSecretsRole.Arn
+      VpcSubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      RequireTLS: true
+      VpcSecurityGroupIds:
+        - !Ref ProxySecurityGroup
+
+  ProxyReaderEndpoint:
+    Type: AWS::RDS::DBProxyEndpoint
+    Properties:
+      DBProxyEndpointName: !Sub pre-${AWS::StackName}
+      DBProxyName: !Ref DBProxy
+      VpcSubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      TargetRole: READ_ONLY
+      VpcSecurityGroupIds:
+        - !Ref ProxySecurityGroup
+
+  ProxySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: RDS Proxy Security Group
+      SecurityGroupEgress:
+        - DestinationSecurityGroupId: !Ref RDSSecurityGroup
+          Description: Allow db outbound traffic
+          IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+      VpcId: !Ref VpcID
+
+  ProxyToRDSIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      IpProtocol: tcp
+      Description: Proxy to RDS ingress rule
+      FromPort: 3306
+      GroupId: !Ref RDSSecurityGroup
+      SourceSecurityGroupId: !Ref ProxySecurityGroup
+      ToPort: 3306
+
+  DBSecretsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: rds.amazonaws.com
+      Policies:
+        - PolicyName: AllowSecretsGetValueForMysqlAuth
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action: secretsmanager:GetSecretValue
+                Effect: Allow
+                Resource:
+                  - !Ref DBSecret
+        - PolicyName: AllowTenantMysqlAuth
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action: rds-db:connect
+                Effect: Allow
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DBCluster.DBClusterResourceId}/${UsernamePrefix}*"
+
+  DBProxyTargetGroup:
+    Type: AWS::RDS::DBProxyTargetGroup
+    DependsOn:
+      - DBWriterInstance # Make sure at least one instance is created for MysqlDbSetupCustomResource to connect to
+      - ProxyToRDSIngress
+    Properties:
+      DBProxyName: !Ref DBProxy
+      TargetGroupName: default
+      ConnectionPoolConfigurationInfo:
+        ConnectionBorrowTimeout: 120
+        MaxConnectionsPercent: 90
+        MaxIdleConnectionsPercent: 50
+      DBClusterIdentifiers:
+        - !Ref DBCluster
+
+  MysqlDbSetupCustomResource:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - DBProxyTargetGroup # Make sure DBProxyTargetGroup is created and ready
+      - MysqlDbSetupCustomResourceSecurityGroupToRdsProxyIngressRule
+    Properties:
+      CodeUri: ./custom_resources/rds_user_setup/
+      Handler: main.handler
+      Timeout: 30
+      Environment:
+        Variables:
+          MYSQL_HOST: !GetAtt DBProxy.Endpoint
+          MYSQL_PORT: 3306
+          MYSQL_USER: !Sub '{{resolve:secretsmanager:${DBSecret}:SecretString:username::}}'
+          INIT_TABLE_NAME: !FindInMap [Constants, Global, InitTableName]
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: rds-db:connect
+              Resource: !Sub
+                - arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbProxyId}/${Username}
+                - Username: !Sub '{{resolve:secretsmanager:${DBSecret}:SecretString:username::}}'
+                  DbProxyId: !Select [6, !Split [":", !GetAtt DBProxy.DBProxyArn]]
+      VpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref MysqlDbSetupCustomResourceSecurityGroup
+
+  MysqlDbSetupCustomResourceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MysqlDbSetupCustomResource Security Group
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to AWS APIs
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - DestinationSecurityGroupId: !Ref ProxySecurityGroup
+          Description: Allow mysql to rds proxy
+          IpProtocol: tcp
+          FromPort: !FindInMap [Constants, Global, MysqlPort]
+          ToPort: !FindInMap [Constants, Global, MysqlPort]
+      VpcId: !Ref VpcID
+
+  MysqlDbSetupCustomResourceSecurityGroupToRdsProxyIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: MysqlDbSetupCustomResource to RDS Proxy ingress rule
+      GroupId: !Ref ProxySecurityGroup
+      SourceSecurityGroupId: !Ref MysqlDbSetupCustomResourceSecurityGroup
+      IpProtocol: tcp
+      FromPort: !FindInMap [Constants, Global, MysqlPort]
+      ToPort: !FindInMap [Constants, Global, MysqlPort]
+
+  MysqlRecordReaper:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/mysql-record-reaper/
+      Handler: main.handler
+      Timeout: 300
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          MYSQL_HOST: !GetAtt DBProxy.Endpoint
+          MYSQL_PORT: 3306
+          MYSQL_USER: !Sub '{{resolve:secretsmanager:${DBSecret}:SecretString:username::}}'
+          TABLE_NAME: !FindInMap [Constants, Global, InitTableName]
+          USERNAMES: tenant1,tenant2,tenant3,tenant4,tenant5,tenant6,tenant7,tenant8,tenant9,tenant10,tenant11,tenant12,tenant13,tenant14,tenant15,tenant16,tenant17,tenant18,tenant19,tenant20,tenant21,tenant22,tenant23,tenant24
+      Events:
+        Schedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(1 hour)
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: rds-db:connect
+              Resource: !Sub
+                - arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DbProxyId}/${Username}
+                - Username: !Sub '{{resolve:secretsmanager:${DBSecret}:SecretString:username::}}'
+                  DbProxyId: !Select [6, !Split [":", !GetAtt DBProxy.DBProxyArn]]
+      VpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref MysqlReaperSecurityGroup
+
+  MysqlReaperSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security Group for MySQL Reaper function
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          Description: Allow HTTPS to AWS APIs
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - DestinationSecurityGroupId: !Ref ProxySecurityGroup
+          Description: Allow mysql to rds proxy
+          IpProtocol: tcp
+          FromPort: !FindInMap [Constants, Global, MysqlPort]
+          ToPort: !FindInMap [Constants, Global, MysqlPort]
+      VpcId: !Ref VpcID
+
+  MysqlReaperSecurityGroupToRdsProxyIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: MySQL Reaper to RDS Proxy ingress rule
+      GroupId: !Ref ProxySecurityGroup
+      SourceSecurityGroupId: !Ref MysqlReaperSecurityGroup
+      IpProtocol: tcp
+      FromPort: !FindInMap [Constants, Global, MysqlPort]
+      ToPort: !FindInMap [Constants, Global, MysqlPort]
+
+  RdsUserTenant1:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}1"
+
+  RdsUserTenant2:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}2"
+
+  RdsUserTenant3:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}3"
+
+  RdsUserTenant4:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}4"
+
+  RdsUserTenant5:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}5"
+
+  RdsUserTenant6:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}6"
+
+  RdsUserTenant7:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}7"
+
+  RdsUserTenant8:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}8"
+
+  RdsUserTenant9:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}9"
+
+  RdsUserTenant10:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}10"
+
+  RdsUserTenant11:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}11"
+
+  RdsUserTenant12:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}12"
+
+  RdsUserTenant13:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}13"
+
+  RdsUserTenant14:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}14"
+
+  RdsUserTenant15:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}15"
+
+  RdsUserTenant16:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}16"
+
+  RdsUserTenant17:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}17"
+
+  RdsUserTenant18:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}18"
+
+  RdsUserTenant19:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}19"
+
+  RdsUserTenant20:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}20"
+
+  RdsUserTenant21:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}21"
+
+  RdsUserTenant22:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}22"
+
+  RdsUserTenant23:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}23"
+
+  RdsUserTenant24:
+    Type: Custom::RDSInit
+    Properties:
+      ServiceToken: !GetAtt MysqlDbSetupCustomResource.Arn
+      ServiceTimeout: 30
+      Username: !Sub "${UsernamePrefix}24"
+
+Outputs:
+  ProxySecurityGroup:
+    Value: !Ref ProxySecurityGroup
+
+  ProxyReaderEndpoint:
+    Value: !GetAtt ProxyReaderEndpoint.Endpoint
+
+  ProxyWriterEndpoint:
+    Value: !GetAtt DBProxy.Endpoint
+
+  ProxyReaderPort:
+    Value: !FindInMap [Constants, Global, MysqlPort]
+
+  ProxyWriterPort:
+    Value: !FindInMap [Constants, Global, MysqlPort]
+
+  TableName:
+    Value: !FindInMap [Constants, Global, InitTableName]
+
+  RdsResourceId:
+    Value: !Select
+      - 6
+      - !Split
+        - ':'
+        - !GetAtt DBProxy.DBProxyArn

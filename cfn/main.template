@@ -1,0 +1,654 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: SaaS Visualizer Demo
+
+Parameters:
+  DBReaderInstanceClass:
+    Description: The database instance class for the Proxy VPC Amazon Aurora Replicas, for example db.m5.large.
+    Type: String
+    Default: db.t3.medium
+    MinLength: 6
+
+  DBWriterInstanceClass:
+    Description: The database instance class for the Proxy VPC Amazon Aurora Writer, for example db.m5.large.
+    Type: String
+    Default: db.t3.medium
+    MinLength: 6
+
+  IsDevDeployment:
+    Description: Is this a development deployment? Setting 'true' enables settings to allow local development and additional logging that is unsuitable for production deployments.
+    Type: String
+    AllowedValues:
+      - "True"
+      - "False"
+    Default: "False"
+
+  IOTTopic:
+    Description: The IoT core topic that events will be published to
+    Type: String
+    Default: "visualise-saas"
+
+  QueueDelaySeconds:
+    Description: How long (in seconds) to delay messages in the queues from becoming visible.
+    Type: Number
+    Default: 0
+    MinValue: 0
+    MaxValue: 900
+
+  CognitoUserEmailPrefix:
+    Type: String
+    Description: Prefix for email addresses to be used to create cognito users. e.g. "nobody+"
+
+  CognitoUserEmailSuffix:
+    Type: String
+    Description: Suffix for email addresses to be used to create cognito users. e.g. "@example.com"
+
+  EnableLoadGenerator:
+    Type: String
+    AllowedValues:
+      - "True"
+      - "False"
+    Default: "False"
+
+  LoadGeneratorMinRequests:
+    Type: Number
+    Description: Minimum number of requests the load generator will make on each invocation
+    Default: 1
+
+  LoadGeneratorMaxRequests:
+    Type: Number
+    Description: Maximum number of requests the load generator will make on each invocation
+    Default: 5
+
+  LoadGeneratorFrequency:
+    Type: Number
+    Description: How often to run the load generator in minutes
+    Default: 1
+
+Conditions:
+  IsDev: !Equals [!Ref IsDevDeployment, "True"]
+  ScheduleLoadGenerator: !Equals [!Ref EnableLoadGenerator, "True"]
+
+Mappings:
+  Constants:
+    Global:
+      FrontendConfigObject: config.js
+      UsernamePrefix: tenant
+
+Globals:
+  Api:
+    TracingEnabled: true
+  Function:
+    Timeout: 15
+    CodeUri: ../src/backend
+    Tracing: Active
+    Runtime: python3.12
+    Architectures:
+      - arm64
+    MemorySize: 256
+    Environment:
+      Variables:
+        CORS_ALLOW_ORIGIN: !If
+          - IsDev
+          - "*"
+          - !Sub "https://${FrontendDistribution.DomainName}"
+        DATA_ACCESS_ROLE_ARN: !GetAtt DataAccessRole.Arn
+        IOT_TOPIC: !Ref IOTTopic
+        POWERTOOLS_LOGGER_LOG_EVENT: !If [ IsDev, "True", "False" ]
+        SHARED_QUEUE_URL: !Ref SharedQueue
+        SILOED_QUEUE_URL: !Ref SiloedQueue
+        TABLE_NAME: !Ref Database
+        MYSQL_READ_HOST: !GetAtt RdsStack.Outputs.ProxyReaderEndpoint
+        MYSQL_READ_PORT: !GetAtt RdsStack.Outputs.ProxyReaderPort
+        MYSQL_TABLE_NAME: !GetAtt RdsStack.Outputs.TableName
+        MYSQL_USERNAME_PREFIX: !FindInMap [Constants, Global, UsernamePrefix]
+        MYSQL_WRITE_HOST: !GetAtt RdsStack.Outputs.ProxyWriterEndpoint
+        MYSQL_WRITE_PORT: !GetAtt RdsStack.Outputs.ProxyWriterPort
+        RDS_USER_ARN_PREFIX: !Sub arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${RdsStack.Outputs.RdsResourceId}/
+    VpcConfig:
+      SubnetIds:
+        - !GetAtt VpcStack.Outputs.PrivateSubnet1
+        - !GetAtt VpcStack.Outputs.PrivateSubnet2
+      SecurityGroupIds:
+        - !Ref ApiLambdaSecurityGroup
+    Layers:
+      - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV3-python312-arm64:11
+
+Resources:
+  CognitoUsersStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: cognito-users.template
+      Parameters:
+        UserPoolId: !GetAtt CognitoUserPool.UserPoolId
+        UserEmailPrefix: !Ref CognitoUserEmailPrefix
+        UserEmailSuffix: !Ref CognitoUserEmailSuffix
+
+  VpcStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: vpc.template
+      Parameters:
+        AvailabilityZones: !Join [",", !GetAZs ""]
+        VPCCidr: 10.0.0.0/16
+        PrivateSubnet1Cidr: 10.0.0.0/24
+        PrivateSubnet2Cidr: 10.0.1.0/24
+        PublicSubnet1Cidr: 10.0.2.0/24
+        PublicSubnet2Cidr: 10.0.3.0/24
+        ResourceTags: visualise-saas
+        EnableFlowLogs: false
+
+  RdsStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: rds.template
+      Parameters:
+        AvailabilityZones: !Join [",", !GetAZs ""]
+        VpcID: !GetAtt VpcStack.Outputs.VpcID
+        PrivateSubnet1: !GetAtt VpcStack.Outputs.PrivateSubnet1
+        PrivateSubnet2: !GetAtt VpcStack.Outputs.PrivateSubnet2
+        DBReaderInstanceClass: !Ref DBReaderInstanceClass
+        DBWriterInstanceClass: !Ref DBWriterInstanceClass
+        PerformanceInsightsRetentionPeriod: 0
+        UsernamePrefix: !FindInMap [Constants, Global, UsernamePrefix]
+
+  ApiLambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !GetAtt VpcStack.Outputs.VpcID
+      GroupDescription: Lambda functions for backend API
+      SecurityGroupEgress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: Allow HTTPS to AWS APIs
+        - DestinationSecurityGroupId: !GetAtt RdsStack.Outputs.ProxySecurityGroup
+          IpProtocol: tcp
+          FromPort: !GetAtt RdsStack.Outputs.ProxyWriterPort
+          ToPort: !GetAtt RdsStack.Outputs.ProxyWriterPort
+          Description: Allow MySQL to RDS Proxy
+
+  ApiLambdaToRdsProxyIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Allow connection from API Lambda Functions
+      GroupId: !GetAtt RdsStack.Outputs.ProxySecurityGroup
+      SourceSecurityGroupId: !Ref ApiLambdaSecurityGroup
+      IpProtocol: tcp
+      FromPort: !GetAtt RdsStack.Outputs.ProxyWriterPort
+      ToPort: !GetAtt RdsStack.Outputs.ProxyWriterPort
+
+  SharedQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      ContentBasedDeduplication: true
+      DelaySeconds: !Ref QueueDelaySeconds
+      FifoQueue: true
+      VisibilityTimeout: 1800
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SharedDLQ.Arn
+        maxReceiveCount: 2
+
+  SiloedQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      ContentBasedDeduplication: true
+      DelaySeconds: !Ref QueueDelaySeconds
+      FifoQueue: true
+      VisibilityTimeout: 1800
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SiloedDLQ.Arn
+        maxReceiveCount: 2
+
+  SharedDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      ContentBasedDeduplication: true
+      FifoQueue: true
+
+  SiloedDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      ContentBasedDeduplication: true
+      FifoQueue: true
+
+  Database:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      EndpointConfiguration: REGIONAL
+      Cors:
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'POST, PUT, PATCH, DELETE, GET, OPTIONS'"
+        AllowOrigin: !If
+          - IsDev
+          - "'*'"
+          - !Sub "'https://${FrontendDistribution.DomainName}'"
+      Auth:
+        AddDefaultAuthorizerToCorsPreflight: False
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt CognitoUserPool.Arn
+
+  DataAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS:
+                - !GetAtt ApiFunctionRole.Arn
+                - !GetAtt SharedQueueConsumerRole.Arn
+                - !GetAtt SiloedQueueConsumerRole.Arn
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: AllowDynamoDBTableActions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: rds-db:connect
+                Resource:  !Sub
+                  - arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${RdsStack.Outputs.RdsResourceId}/${UsernamePrefix}*
+                  - UsernamePrefix: !FindInMap [Constants, Global, UsernamePrefix]
+              - Effect: Allow
+                Action:
+                  - dynamodb:BatchGetItem
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:ConditionCheckItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:DescribeTable
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt Database.Arn
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.api_handler
+      Policies:
+        - SQSSendMessagePolicy: { QueueName: !GetAtt SharedQueue.QueueName }
+        - SQSSendMessagePolicy: { QueueName: !GetAtt SiloedQueue.QueueName }
+        - !Ref IotPublishPolicy
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: WebApiHandler
+      Events:
+        NewUser:
+          Type: Api
+          Properties:
+            Path: /new_tenant
+            Method: PUT
+            RestApiId: !Ref Api
+        GetItems:
+          Type: Api
+          Properties:
+            Path: /orders
+            Method: GET
+            RestApiId: !Ref Api
+        PutOrderShared:
+          Type: Api
+          Properties:
+            Path: /orders
+            Method: PUT
+            RestApiId: !Ref Api
+        PutOrderSiloed:
+          Type: Api
+          Properties:
+            Path: /orders_siloed
+            Method: PUT
+            RestApiId: !Ref Api
+
+  SharedQueueConsumer:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.queue_handler
+      Timeout: 300
+      Policies:
+        - SQSPollerPolicy: { QueueName: !GetAtt SharedQueue.QueueName }
+        - !Ref IotPublishPolicy
+      Environment:
+        Variables:
+          IOT_SQS_STAGE_TYPE: SHARED
+          POWERTOOLS_SERVICE_NAME: SharedQueueConsumer
+      Events:
+        Batch:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SharedQueue.Arn
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            ScalingConfig:
+              MaximumConcurrency: 2
+
+  SiloedQueueConsumer:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: handler.queue_handler
+      Timeout: 300
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref Database }
+        - SQSPollerPolicy: { QueueName: !GetAtt SiloedQueue.QueueName }
+        - !Ref IotPublishPolicy
+      Environment:
+        Variables:
+          IOT_SQS_STAGE_TYPE: SILOED
+          POWERTOOLS_SERVICE_NAME: SiloedQueueConsumer
+      Events:
+        Batch:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt SiloedQueue.Arn
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            ScalingConfig:
+              MaximumConcurrency: 2
+
+  IotPublishPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: iot:Publish
+            Resource: !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topic/${IOTTopic}"
+
+  # IoT Thing for device connection
+  VisualiseSaaSIoTThing:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: !Sub "${AWS::StackName}-device"
+      AttributePayload:
+        Attributes:
+          Description: "VisualiseSaaS-LED-Display-Device"
+          Environment: !Ref IsDevDeployment
+
+  # IoT Policy with subscribe-only permissions
+  VisualiseSaaSIoTPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: !Sub "${AWS::StackName}-device-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          # Allow connection to IoT Core
+          - Effect: Allow
+            Action:
+              - iot:Connect
+            Resource:
+              - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:client/${AWS::StackName}-*"
+          # Allow subscribing to the IOTTopic
+          - Effect: Allow
+            Action:
+              - iot:Subscribe
+            Resource:
+              - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/${IOTTopic}"
+          # Allow receiving messages from subscribed topic
+          - Effect: Allow
+            Action:
+              - iot:Receive
+            Resource:
+              - !Sub "arn:${AWS::Partition}:iot:${AWS::Region}:${AWS::AccountId}:topic/${IOTTopic}"
+
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+      MfaConfiguration: "OPTIONAL"
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+      AutoVerifiedAttributes:
+        - email
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: admin_only
+            Priority: 1
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+        UnusedAccountValidityDays: 7
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: false
+        - AttributeDataType: String
+          Name: tenantName
+          Required: false
+        - AttributeDataType: String
+          Name: tenantColor
+          Required: false
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      ReadAttributes:
+        - email
+        - custom:tenantName
+        - custom:tenantColor
+
+  LoadGenerator:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../src/load-generator/
+      Environment:
+        Variables:
+          POWERTOOLS_SERVICE_NAME: LoadGenerator
+          API_ENDPOINT: !Sub https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          COGNITO_USER_POOL_ID: !GetAtt CognitoUserPool.UserPoolId
+          COGNITO_USER_POOL_REGION: !Ref AWS::Region
+          MAX_ITEMS: !Ref LoadGeneratorMaxRequests
+          MIN_ITEMS: !Ref LoadGeneratorMinRequests
+          PASSWORD_SECRET_ARN: !GetAtt CognitoUsersStack.Outputs.UserSecretArn
+          USERNAMES: !Join
+            - ","
+            - - !Sub "${CognitoUserEmailPrefix}21${CognitoUserEmailSuffix}"
+              - !Sub "${CognitoUserEmailPrefix}22${CognitoUserEmailSuffix}"
+              - !Sub "${CognitoUserEmailPrefix}23${CognitoUserEmailSuffix}"
+              - !Sub "${CognitoUserEmailPrefix}24${CognitoUserEmailSuffix}"
+      Events:
+        Schedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: !Sub "rate(${LoadGeneratorFrequency} minute)"
+            State: !If
+              - ScheduleLoadGenerator
+              - ENABLED
+              - DISABLED
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !GetAtt CognitoUsersStack.Outputs.UserSecretArn
+      ReservedConcurrentExecutions: 1
+      Handler: main.handler
+      Timeout: 60
+
+  UiSettingsResource:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: ui_settings.handler
+      CodeUri: custom_resources/ui_settings
+      Timeout: 60
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:DeleteObject
+                - s3:PutObjectAcl
+              Resource: !Sub
+                - "${FrontendBucket.Arn}/${ConfigObject}"
+                - ConfigObject: !FindInMap [Constants, Global, FrontendConfigObject]
+
+  UiSettings:
+    Type: Custom::UiSettings
+    Properties:
+      ACL: private
+      BucketName: !Ref FrontendBucket
+      ObjectKey: !FindInMap [Constants, Global, FrontendConfigObject]
+      Content: !Sub |-
+        window.APP_CONFIG = {
+          api: {
+            dataAccessUrl: "https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/orders",
+            orderSharedQueueUrl: "https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/orders",
+            orderSiloedQueueUrl: "https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/orders_siloed",
+            newUserStageUrl: "https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/new_tenant"
+          },
+          auth: {
+            userPoolId: "${CognitoUserPool.UserPoolId}",
+            userPoolClientId: "${CognitoUserPoolClient}",
+            region: "${AWS::Region}"
+          }
+        };
+      ContentType: text/javascript
+      ServiceToken: !GetAtt UiSettingsResource.Arn
+      ServiceTimeout: 60
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureConnections
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "${FrontendBucket.Arn}/*"
+              - !GetAtt FrontendBucket.Arn
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+          - Sid: AllowCloudFrontServicePrincipal
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: "s3:GetObject"
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "AWS:SourceArn": !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution}"
+
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-OAC"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !Ref FrontendOriginAccessControl
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # Managed-CachingOptimized
+          OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # Managed-CORS-S3Origin
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03  # Managed-SecurityHeadersPolicy
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+Outputs:
+  ApiGatewayUrl:
+    Description: URL of the API Gateway.
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.${AWS::URLSuffix}/prod/
+
+  CognitoUsersPasswordSecretArn:
+    Description: "Secrets Manager secret ARN for password assigned to users in Cognito"
+    Value: !GetAtt CognitoUsersStack.Outputs.UserSecretArn
+
+  FrontendDistributionUrl:
+    Description: URL of the CloudFront distribution for the frontend
+    Value: !Sub https://${FrontendDistribution.DomainName}
+
+  FrontendBucketName:
+    Description: Name of the S3 bucket hosting the frontend
+    Value: !Ref FrontendBucket
+
+  FrontendDistributionId:
+    Description: ID of the CloudFront distribution for the frontend
+    Value: !Ref FrontendDistribution
+
+  IoTThingName:
+    Description: Name of the IoT Thing for device connection
+    Value: !Ref VisualiseSaaSIoTThing
+    Export:
+      Name: !Sub "${AWS::StackName}-IoTThingName"
+
+  IoTPolicyName:
+    Description: Name of the IoT Policy for device certificates
+    Value: !Ref VisualiseSaaSIoTPolicy
+    Export:
+      Name: !Sub "${AWS::StackName}-IoTPolicyName"
+
+  IoTTopicName:
+    Description: IoT topic name for device subscription
+    Value: !Ref IOTTopic
+    Export:
+      Name: !Sub "${AWS::StackName}-IoTTopic"

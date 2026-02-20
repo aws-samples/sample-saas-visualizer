@@ -1,0 +1,31 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "visualise-saas"
+s3_prefix = "visualise-saas"
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM CAPABILITY_AUTO_EXPAND"
+disable_rollback = true
+parameter_overrides=[
+  "DBReaderInstanceClass=db.t3.medium",
+  "DBWriterInstanceClass=db.t3.medium",
+  "IsDevDeployment=True",
+  "EnableLoadGenerator=False",
+  "LoadGeneratorMinRequests=1",
+  "LoadGeneratorMaxRequests=5",
+  "LoadGeneratorFrequency=1",
+  "CognitoUserEmailPrefix=username+",
+  "CognitoUserEmailSuffix=@example.com",
+]
+image_repositories = []
+
+[default.deploy.parameters]
+resolve_s3 = true
+
+[default.build.parameters]
+template = "cfn/main.template"
+
+[default.sync.parameters]
+template = "cfn/main.template"
+resolve_s3 = true
+dependency_layer = false

@@ -1,0 +1,695 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Pre-created Cognito users for SaaS Visualizer Demo
+
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  UserPoolId:
+    Type: String
+    Description: The ID of the Cognito User Pool
+  UserEmailPrefix:
+    Type: String
+    Description: Email address for the user
+  UserEmailSuffix:
+    Type: String
+    Description: Email address for the user
+
+Resources:
+  UsersPassword:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: !Sub Cognito users login password for ${AWS::StackName}
+      GenerateSecretString:
+        PasswordLength: 8
+        RequireEachIncludedType: True
+
+  SetPasswordCustomResource:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: custom_resources/set_cognito_user_password/
+      Handler: main.handler
+      Runtime: python3.12
+      Architectures:
+        - arm64
+      Timeout: 10
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref UsersPassword
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action: cognito-idp:AdminSetUserPassword
+              Resource: !Sub "arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}"
+
+  CognitoUser1:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}1${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}1${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 1
+        - Name: custom:tenantColor
+          Value: "#FF0000"
+      MessageAction: SUPPRESS
+
+  CognitoUser2:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}2${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}2${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 2
+        - Name: custom:tenantColor
+          Value: "#00FF00"
+      MessageAction: SUPPRESS
+
+  CognitoUser3:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}3${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}3${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 3
+        - Name: custom:tenantColor
+          Value: "#0000FF"
+      MessageAction: SUPPRESS
+
+  CognitoUser4:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}4${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}4${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 4
+        - Name: custom:tenantColor
+          Value: "#FFFF00"
+      MessageAction: SUPPRESS
+
+  CognitoUser5:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}5${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}5${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 5
+        - Name: custom:tenantColor
+          Value: "#FF00FF"
+      MessageAction: SUPPRESS
+
+  CognitoUser6:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}6${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}6${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 6
+        - Name: custom:tenantColor
+          Value: "#00FFFF"
+      MessageAction: SUPPRESS
+
+  CognitoUser7:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}7${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}7${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 7
+        - Name: custom:tenantColor
+          Value: "#800000"
+      MessageAction: SUPPRESS
+
+  CognitoUser8:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}8${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}8${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 8
+        - Name: custom:tenantColor
+          Value: "#008000"
+      MessageAction: SUPPRESS
+
+  CognitoUser9:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}9${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}9${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 9
+        - Name: custom:tenantColor
+          Value: "#000080"
+      MessageAction: SUPPRESS
+
+  CognitoUser10:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}10${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}10${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 10
+        - Name: custom:tenantColor
+          Value: "#808000"
+      MessageAction: SUPPRESS
+
+  CognitoUser11:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}11${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}11${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 11
+        - Name: custom:tenantColor
+          Value: "#800080"
+      MessageAction: SUPPRESS
+
+  CognitoUser12:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}12${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}12${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 12
+        - Name: custom:tenantColor
+          Value: "#008080"
+      MessageAction: SUPPRESS
+
+  CognitoUser13:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}13${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}13${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 13
+        - Name: custom:tenantColor
+          Value: "#FF4500"
+      MessageAction: SUPPRESS
+
+  CognitoUser14:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}14${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}14${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 14
+        - Name: custom:tenantColor
+          Value: "#32CD32"
+      MessageAction: SUPPRESS
+
+  CognitoUser15:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}15${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}15${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 15
+        - Name: custom:tenantColor
+          Value: "#4169E1"
+      MessageAction: SUPPRESS
+
+  CognitoUser16:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}16${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}16${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 16
+        - Name: custom:tenantColor
+          Value: "#FFD700"
+      MessageAction: SUPPRESS
+
+  CognitoUser17:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}17${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}17${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 17
+        - Name: custom:tenantColor
+          Value: "#DA70D6"
+      MessageAction: SUPPRESS
+
+  CognitoUser18:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}18${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}18${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 18
+        - Name: custom:tenantColor
+          Value: "#40E0D0"
+      MessageAction: SUPPRESS
+
+  CognitoUser19:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}19${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}19${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 19
+        - Name: custom:tenantColor
+          Value: "#B22222"
+      MessageAction: SUPPRESS
+
+  CognitoUser20:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}20${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}20${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 20
+        - Name: custom:tenantColor
+          Value: "#228B22"
+      MessageAction: SUPPRESS
+
+  CognitoUser21:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}21${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}21${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 21
+        - Name: custom:tenantColor
+          Value: "#4682B4"
+      MessageAction: SUPPRESS
+
+  CognitoUser22:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}22${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}22${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 22
+        - Name: custom:tenantColor
+          Value: "#DAA520"
+      MessageAction: SUPPRESS
+
+  CognitoUser23:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}23${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}23${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 23
+        - Name: custom:tenantColor
+          Value: "#9370DB"
+      MessageAction: SUPPRESS
+
+  CognitoUser24:
+    Type: AWS::Cognito::UserPoolUser
+    Properties:
+      UserPoolId: !Ref UserPoolId
+      Username: !Sub "${UserEmailPrefix}24${UserEmailSuffix}"
+      DesiredDeliveryMediums:
+        - EMAIL
+      UserAttributes:
+        - Name: email
+          Value: !Sub "${UserEmailPrefix}24${UserEmailSuffix}"
+        - Name: email_verified
+          Value: "true"
+        - Name: custom:tenantName
+          Value: 24
+        - Name: custom:tenantColor
+          Value: "#48D1CC"
+      MessageAction: SUPPRESS
+
+  CognitoUser1SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser1
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser2SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser2
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser3SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser3
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser4SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser4
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser5SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser5
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser6SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser6
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser7SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser7
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser8SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser8
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser9SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser9
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser10SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser10
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser11SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser11
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser12SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser12
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser13SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser13
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser14SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser14
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser15SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser15
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser16SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser16
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser17SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser17
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser18SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser18
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser19SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser19
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser20SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser20
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser21SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser21
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser22SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser22
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser23SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser23
+      UserPasswordSecretArn: !Ref UsersPassword
+
+  CognitoUser24SetPassword:
+    Type: Custom::SetCognitoUserPassword
+    Properties:
+      ServiceToken: !GetAtt SetPasswordCustomResource.Arn
+      ServiceTimeout: 10
+      UserPoolId: !Ref UserPoolId
+      UserEmail: !Ref CognitoUser24
+      UserPasswordSecretArn: !Ref UsersPassword
+
+Outputs:
+  UserSecretArn:
+    Value: !Ref UsersPassword
