@@ -37,12 +37,12 @@ Photo at previous AWS Summit, showing UI and LED display:
 
 ## Architecture Components
 
-- **Frontend**: React application with Vite and Tailwind CSS
-- **Backend**: AWS Lambda functions with API Gateway
-- **Database**: Aurora for tenant isolation visualization
-- **Authentication**: AWS Cognito user management
-- **Messaging**: AWS IoT Core for real-time display updates
-- **LED Display**: Python application supporting hardware and emulator modes
+- **Frontend**: React application with Vite and Tailwind CSS.
+- **Backend**: AWS Lambda functions with API Gateway.
+- **Database**: Aurora for tenant isolation visualization.
+- **Authentication**: AWS Cognito user management.
+- **Messaging**: AWS IoT Core for real-time display updates.
+- **LED Display**: Python application supporting hardware and emulator modes.
 
 ## Deployment Instructions
 
@@ -67,20 +67,20 @@ For other local development setup, configuration management, and making backend 
 ### Using the Application
 Once deployment is complete and the LED display is running (emulator or hardware), see the [Usage Guide](docs/use-sample.md) for:
 
-- How to log in with demo credentials
-- Testing the application features
-- Watching transactions flow through the architecture on the LED display
-- Understanding the multi-tenant visualization
+- How to log in with demo credentials.
+- Testing the application features.
+- Watching transactions flow through the architecture on the LED display.
+- Understanding the multi-tenant visualization.
 
 ## Contributing
 
 Contributions are more than welcome. We're particularly interested in contributions in the following areas:
 
-- Frontend UI/UX improvements
-- Additional SaaS architecture patterns and visualizations
-- Performance optimizations for the LED display
-- Documentation improvements and translations
-- Bug fixes and security enhancements
+- Frontend UI/UX improvements.
+- Additional SaaS architecture patterns and visualizations.
+- Performance optimizations for the LED display.
+- Documentation improvements and translations.
+- Bug fixes and security enhancements.
 
 Please read the [code of conduct](CODE_OF_CONDUCT.md) and the [contributing guidelines](CONTRIBUTING.md) before submitting your contribution.
 
