@@ -86,7 +86,7 @@ Please read the [code of conduct](CODE_OF_CONDUCT.md) and the [contributing guid
 
 ## License
 
-This library is licensed under the MIT-0 License. See the LICENSE file. See also the THIRD-PARTY file for third-party notices.
+This library is licensed under the MIT-0 License. See the LICENSE file. 
 
 ### 3rd Party Licensing
 
