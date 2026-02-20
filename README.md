@@ -23,7 +23,7 @@ Reference complete architecture:
 <img src="docs/Architecture.png" alt="Complete Architecture" width="50%">
 </p>
 
-LED display (software emulated). Note that this entire diagram has the same components as the rectangle around "LED solution" in the above diagram. Also note that this display will either be displayed on an emulator if *Emulator mode* is chosen, or on a physical set of LEDs if *Hardware mode* is chosen.
+LED display (software emulated). Note that this entire diagram has the same components as the rectangle around "LED solution" in the above diagram. Also note that this will either be shown on a software emulator if *Emulator mode* is chosen, or on a physical set of LEDs if *Hardware mode* is chosen.
 
 <p align="center">
 <img src="docs/led-emulated.jpg" alt="Summit Photo" width="50%">
