@@ -14,7 +14,7 @@
     "@aws-amplify/ui-react": "^6.9.1",
     "@aws-sdk/client-cognito-identity-provider": "^3.775.0",
     "aws-amplify": "^6.13.1",
-    "axios": "^1.13.5",
+    "axios": "^1.15.2",
     "core-js": "^3.40.0",
     "dayjs": "^1.11.13",
     "glob": "^11.0.1",
