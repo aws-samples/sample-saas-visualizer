@@ -439,11 +439,20 @@ Resources:
         - AttributeDataType: String
           Name: email
           Required: false
+        # tenantName and tenantColor carry the tenant identity that the backend
+        # trusts for data isolation. Mutable: false stops a signed-in user from
+        # calling UpdateUserAttributes to overwrite their own tenant and read or
+        # write another tenant's data. The values are still set once at creation
+        # by AdminCreateUser (see cognito-users.template). Note: mutability is
+        # fixed when the attribute is created and cannot be changed on an
+        # existing pool, so this takes effect on a fresh deploy.
         - AttributeDataType: String
           Name: tenantName
+          Mutable: false
           Required: false
         - AttributeDataType: String
           Name: tenantColor
+          Mutable: false
           Required: false
 
   CognitoUserPoolClient:

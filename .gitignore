@@ -562,3 +562,6 @@ iot-certificate/
 *.crt
 *.key
 device-config.json
+
+# Local, environment-specific SAM config (personal stack name, region, Cognito emails)
+samconfig.local.toml
